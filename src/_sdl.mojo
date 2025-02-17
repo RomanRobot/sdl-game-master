@@ -3,7 +3,7 @@
 from sys import DLHandle, os_is_macos, os_is_linux
 from pathlib import Path
 from collections import Optional
-from .window import _Window, _GLContext
+from .window import _Window, _GLContext, _SysWMinfo
 from .surface import _Surface
 from .render import _Renderer
 from .texture import _Texture
@@ -12,12 +12,11 @@ from .gfx import _GFX
 from .img import _IMG
 from .mix import _MIX
 from .ttf import _TTF
-from sys.info import os_is_macos, os_is_linux
 from builtin.constrained import constrained
 
 
 trait AddonLib:
-    fn __init__(inout self, error: SDL_Error):
+    fn __init__(mut self, error: SDL_Error):
         ...
 
     fn quit(self):
@@ -28,18 +27,18 @@ struct OptionalLib[LibType: AddonLib, error_msg: StringLiteral]:
     var _lib: LibType
     var _enabled: Bool
 
-    fn __init__(inout self, none: None):
+    fn __init__(mut self, none: None):
         self._lib = utils._uninit[LibType]()
         self._enabled = False
 
-    fn __init__(inout self, error: SDL_Error):
+    fn __init__(mut self, error: SDL_Error):
         self._lib = LibType(error)
         self._enabled = True
 
     fn __bool__(self) -> Bool:
         return self._enabled
 
-    fn __call__(self) raises -> ref [__lifetime_of(self)] LibType:
+    fn __call__(self) raises -> ref [__origin_of(self)] LibType:
         """Unwrap the optional if possible, otherwise error."""
 
         @parameter
@@ -52,6 +51,10 @@ struct OptionalLib[LibType: AddonLib, error_msg: StringLiteral]:
         if self._enabled:
             self._lib.quit()
 
+alias OptionalLibGFX = OptionalLib[_GFX, "sdl_gfx is not enabled"]
+alias OptionalLibIMG = OptionalLib[_IMG, "sdl_img is not enabled"]
+alias OptionalLibMIX = OptionalLib[_MIX, "sdl_mix is not enabled"]
+alias OptionalLibTTF = OptionalLib[_TTF, "sdl_ttf is not enabled"]
 
 struct SDL:
     """Safe wrapper around sdl bindings."""
@@ -60,13 +63,13 @@ struct SDL:
     var _sdl: _SDL
 
     # libraries
-    var _gfx: OptionalLib[_GFX, "sdl_gfx is not enabled"]
-    var _img: OptionalLib[_IMG, "sdl_img is not enabled"]
-    var _mix: OptionalLib[_MIX, "sdl_mix is not enabled"]
-    var _ttf: OptionalLib[_TTF, "sdl_ttf is not enabled"]
+    var _gfx: OptionalLibGFX
+    var _img: OptionalLibIMG
+    var _mix: OptionalLibMIX
+    var _ttf: OptionalLibTTF
 
     fn __init__(
-        inout self,
+        mut self,
         timer: Bool = False,
         audio: Bool = False,
         video: Bool = False,
@@ -85,10 +88,10 @@ struct SDL:
         If you want to only initialize the bindings, use `_SDL`.
         """
         self._sdl = _SDL()
-        self._gfx = None
-        self._img = None
-        self._mix = None
-        self._ttf = None
+        self._gfx = OptionalLibGFX(None)
+        self._img = OptionalLibIMG(None)
+        self._mix = OptionalLibMIX(None)
+        self._ttf = OptionalLibTTF(None)
 
         # x--- set window flags
         var flags: UInt32 = 0
@@ -115,11 +118,11 @@ struct SDL:
         if ttf:
             self.init_ttf()
 
-    fn init_gfx(inout self) raises:
-        self._gfx = self._sdl.error
+    fn init_gfx(mut self) raises:
+        self._gfx = OptionalLibGFX(self._sdl.error)
 
-    fn init_img(inout self, jpeg: Bool = True, png: Bool = True, tif: Bool = False, webp: Bool = False) raises:
-        self._img = self._sdl.error
+    fn init_img(mut self, jpeg: Bool = True, png: Bool = True, tif: Bool = False, webp: Bool = False) raises:
+        self._img = OptionalLibIMG(self._sdl.error)
         var flags: Int32 = 0
         flags |= 0x00000001 * jpeg
         flags |= 0x00000002 * png
@@ -127,12 +130,12 @@ struct SDL:
         flags |= 0x00000008 * webp
         self._img._lib.init(flags)
 
-    fn init_mix(inout self, frequency: Int32 = 44100, format: UInt16 = mix.sound.AUDIO_S16LSB, channels: Int32 = 2, chunksize: Int32 = 2048) raises:
-        self._mix = self._sdl.error
+    fn init_mix(mut self, frequency: Int32 = 44100, format: UInt16 = mix.sound.AUDIO_S16LSB, channels: Int32 = 2, chunksize: Int32 = 2048) raises:
+        self._mix = OptionalLibMIX(self._sdl.error)
         self._mix._lib.init(frequency, format, channels, chunksize)
 
-    fn init_ttf(inout self) raises:
-        self._ttf = self._sdl.error
+    fn init_ttf(mut self) raises:
+        self._ttf = OptionalLibTTF(self._sdl.error)
         self._ttf._lib.init()
 
     fn __del__(owned self):
@@ -164,7 +167,7 @@ struct SDL_Fn[name: String, T: AnyTrivialRegType]:
     var call: T
 
     @always_inline("nodebug")
-    fn __init__(inout self, _handle: DLHandle):
+    fn __init__(mut self, _handle: DLHandle):
         self.call = _handle.get_function[T](name)
 
 
@@ -244,7 +247,7 @@ struct _SDL:
         "SDL_GetWindowSizeInPixels",
         fn (Ptr[_Window], Ptr[IntC], Ptr[IntC]) -> NoneType,
     ]
-    # # SDL_GetWindowWMInfo
+    var _get_window_info: SDL_Fn["SDL_GetWindowWMInfo", fn (Ptr[_Window], Ptr[_SysWMinfo]) -> BoolC]
     var _get_window_surface: SDL_Fn["SDL_GetWindowSurface", fn (Ptr[_Window]) -> Ptr[_Surface]]
     var _get_renderer: SDL_Fn["SDL_GetRenderer", fn (Ptr[_Window]) -> Ptr[_Renderer]]
     var _set_window_always_on_top: SDL_Fn["SDL_SetWindowAlwaysOnTop", fn (Ptr[_Window], BoolC) -> NoneType]
@@ -543,7 +546,7 @@ struct _SDL:
     var _gl_create_context: SDL_Fn["SDL_GL_CreateContext", fn (Ptr[_Window]) -> Ptr[_GLContext]]
     var _gl_delete_context: SDL_Fn["SDL_GL_DeleteContext", fn (Ptr[_GLContext]) -> None]
 
-    fn __init__(inout self):
+    fn __init__(mut self):
         # x--- initialize sdl bindings
         @parameter
         if os_is_macos():
@@ -554,212 +557,212 @@ struct _SDL:
             constrained[False, "OS is not supported"]()
             self._handle = utils._uninit[DLHandle]()
 
-        self._init = self._handle
-        self._quit = self._handle
-        self._init_sub_system = self._handle
-        self._quit_sub_system = self._handle
+        self._init = __type_of(self._init)(self._handle)
+        self._quit = __type_of(self._quit)(self._handle)
+        self._init_sub_system = __type_of(self._init_sub_system)(self._handle)
+        self._quit_sub_system = __type_of(self._quit_sub_system)(self._handle)
 
         # x--- initialize sdl error
-        self.error = self._handle
+        self.error = __type_of(self.error)(self._handle)
 
         # x--- initialize keyboard bindings
-        self._get_keyboard_state = self._handle
+        self._get_keyboard_state = __type_of(self._get_keyboard_state)(self._handle)
 
         # x--- initialize mouse bindings
-        self._get_mouse_state = self._handle
+        self._get_mouse_state = __type_of(self._get_mouse_state)(self._handle)
 
         # x--- initialize event bindings
-        self._poll_event = self._handle
+        self._poll_event = __type_of(self._poll_event)(self._handle)
 
         # x--- initialize timer
-        self._get_ticks = self._handle
-        self._delay = self._handle
+        self._get_ticks = __type_of(self._get_ticks)(self._handle)
+        self._delay = __type_of(self._delay)(self._handle)
 
         # x--- initialize window bindings
-        self._create_window = self._handle
-        self._create_shaped_window = self._handle
-        self._create_window_and_renderer = self._handle
-        self._create_window_from = self._handle
-        self._destroy_window_surface = self._handle
-        self._destroy_window = self._handle
-        self._is_shaped_window = self._handle
-        self._has_window_surface = self._handle
-        self._get_grabbed_window = self._handle
+        self._create_window = __type_of(self._create_window)(self._handle)
+        self._create_shaped_window = __type_of(self._create_shaped_window)(self._handle)
+        self._create_window_and_renderer = __type_of(self._create_window_and_renderer)(self._handle)
+        self._create_window_from = __type_of(self._create_window_from)(self._handle)
+        self._destroy_window_surface = __type_of(self._destroy_window_surface)(self._handle)
+        self._destroy_window = __type_of(self._destroy_window)(self._handle)
+        self._is_shaped_window = __type_of(self._is_shaped_window)(self._handle)
+        self._has_window_surface = __type_of(self._has_window_surface)(self._handle)
+        self._get_grabbed_window = __type_of(self._get_grabbed_window)(self._handle)
         # SDL_GetShapedWindowMode
-        self._get_window_border_size = self._handle
-        self._get_window_brightness = self._handle
-        self._get_window_gamma_ramp = self._handle
-        self._get_window_opacity = self._handle
-        self._get_window_data = self._handle
-        self._get_window_display_index = self._handle
-        self._get_window_display_mode = self._handle
-        self._get_window_flags = self._handle
-        self._get_window_from_id = self._handle
-        self._get_window_grab = self._handle
+        self._get_window_border_size = __type_of(self._get_window_border_size)(self._handle)
+        self._get_window_brightness = __type_of(self._get_window_brightness)(self._handle)
+        self._get_window_gamma_ramp = __type_of(self._get_window_gamma_ramp)(self._handle)
+        self._get_window_opacity = __type_of(self._get_window_opacity)(self._handle)
+        self._get_window_data = __type_of(self._get_window_data)(self._handle)
+        self._get_window_display_index = __type_of(self._get_window_display_index)(self._handle)
+        self._get_window_display_mode = __type_of(self._get_window_display_mode)(self._handle)
+        self._get_window_flags = __type_of(self._get_window_flags)(self._handle)
+        self._get_window_from_id = __type_of(self._get_window_from_id)(self._handle)
+        self._get_window_grab = __type_of(self._get_window_grab)(self._handle)
         # SDL_GetWindowICCProfile
-        self._get_window_id = self._handle
-        self._get_window_keyboard_grab = self._handle
-        self._get_window_mouse_grab = self._handle
-        self._get_window_maximum_size = self._handle
-        self._get_window_minimum_size = self._handle
-        self._get_window_mouse_rect = self._handle
-        self._get_window_pixel_format = self._handle
-        self._get_window_title = self._handle
-        self._get_window_position = self._handle
-        self._get_window_size = self._handle
-        self._get_window_size_in_pixels = self._handle
-        # # SDL_GetWindowWMInfo
-        self._get_window_surface = self._handle
-        self._get_renderer = self._handle
-        self._set_window_always_on_top = self._handle
-        self._set_window_bordered = self._handle
-        self._set_window_brightness = self._handle
-        self._set_window_gamma_ramp = self._handle
-        self._set_window_opacity = self._handle
-        self._set_window_data = self._handle
-        self._set_window_display_mode = self._handle
-        self._set_window_fullscreen = self._handle
-        self._set_window_grab = self._handle
+        self._get_window_id = __type_of(self._get_window_id)(self._handle)
+        self._get_window_keyboard_grab = __type_of(self._get_window_keyboard_grab)(self._handle)
+        self._get_window_mouse_grab = __type_of(self._get_window_mouse_grab)(self._handle)
+        self._get_window_maximum_size = __type_of(self._get_window_maximum_size)(self._handle)
+        self._get_window_minimum_size = __type_of(self._get_window_minimum_size)(self._handle)
+        self._get_window_mouse_rect = __type_of(self._get_window_mouse_rect)(self._handle)
+        self._get_window_pixel_format = __type_of(self._get_window_pixel_format)(self._handle)
+        self._get_window_title = __type_of(self._get_window_title)(self._handle)
+        self._get_window_position = __type_of(self._get_window_position)(self._handle)
+        self._get_window_size = __type_of(self._get_window_size)(self._handle)
+        self._get_window_size_in_pixels = __type_of(self._get_window_size_in_pixels)(self._handle)
+        self._get_window_info = __type_of(self._get_window_info)(self._handle)
+        self._get_window_surface = __type_of(self._get_window_surface)(self._handle)
+        self._get_renderer = __type_of(self._get_renderer)(self._handle)
+        self._set_window_always_on_top = __type_of(self._set_window_always_on_top)(self._handle)
+        self._set_window_bordered = __type_of(self._set_window_bordered)(self._handle)
+        self._set_window_brightness = __type_of(self._set_window_brightness)(self._handle)
+        self._set_window_gamma_ramp = __type_of(self._set_window_gamma_ramp)(self._handle)
+        self._set_window_opacity = __type_of(self._set_window_opacity)(self._handle)
+        self._set_window_data = __type_of(self._set_window_data)(self._handle)
+        self._set_window_display_mode = __type_of(self._set_window_display_mode)(self._handle)
+        self._set_window_fullscreen = __type_of(self._set_window_fullscreen)(self._handle)
+        self._set_window_grab = __type_of(self._set_window_grab)(self._handle)
         # SDL_SetWindowHitTest
-        self._set_window_icon = self._handle
-        self._set_window_input_focus = self._handle
-        self._set_window_keyboard_grab = self._handle
-        self._set_window_mouse_grab = self._handle
-        self._set_window_maximum_size = self._handle
-        self._set_window_minimum_size = self._handle
-        self._set_window_modal_for = self._handle
-        self._set_window_mouse_rect = self._handle
-        self._set_window_position = self._handle
-        self._set_window_resizable = self._handle
-        self._set_window_size = self._handle
+        self._set_window_icon = __type_of(self._set_window_icon)(self._handle)
+        self._set_window_input_focus = __type_of(self._set_window_input_focus)(self._handle)
+        self._set_window_keyboard_grab = __type_of(self._set_window_keyboard_grab)(self._handle)
+        self._set_window_mouse_grab = __type_of(self._set_window_mouse_grab)(self._handle)
+        self._set_window_maximum_size = __type_of(self._set_window_maximum_size)(self._handle)
+        self._set_window_minimum_size = __type_of(self._set_window_minimum_size)(self._handle)
+        self._set_window_modal_for = __type_of(self._set_window_modal_for)(self._handle)
+        self._set_window_mouse_rect = __type_of(self._set_window_mouse_rect)(self._handle)
+        self._set_window_position = __type_of(self._set_window_position)(self._handle)
+        self._set_window_resizable = __type_of(self._set_window_resizable)(self._handle)
+        self._set_window_size = __type_of(self._set_window_size)(self._handle)
         # SDL_SetWindowsMessageHook
         # SDL_SetWindowShape
-        self._set_window_title = self._handle
+        self._set_window_title = __type_of(self._set_window_title)(self._handle)
         # # SDL_GL_GetCurrentWindow
         # # SDL_GL_SwapWindow
-        self._update_window_surface = self._handle
-        self._update_window_surface_rects = self._handle
-        self._show_window = self._handle
-        self._hide_window = self._handle
-        self._maximize_window = self._handle
-        self._minimize_window = self._handle
-        self._flash_window = self._handle
-        self._raise_window = self._handle
-        self._restore_window = self._handle
-        self._warp_mouse_in_window = self._handle
+        self._update_window_surface = __type_of(self._update_window_surface)(self._handle)
+        self._update_window_surface_rects = __type_of(self._update_window_surface_rects)(self._handle)
+        self._show_window = __type_of(self._show_window)(self._handle)
+        self._hide_window = __type_of(self._hide_window)(self._handle)
+        self._maximize_window = __type_of(self._maximize_window)(self._handle)
+        self._minimize_window = __type_of(self._minimize_window)(self._handle)
+        self._flash_window = __type_of(self._flash_window)(self._handle)
+        self._raise_window = __type_of(self._raise_window)(self._handle)
+        self._restore_window = __type_of(self._restore_window)(self._handle)
+        self._warp_mouse_in_window = __type_of(self._warp_mouse_in_window)(self._handle)
 
         # x--- initialize surface bindings
-        self._create_rgb_surface = self._handle
-        self._create_rgb_surface_from = self._handle
-        self._create_rgb_surface_with_format = self._handle
-        self._create_rgb_surface_with_format_from = self._handle
-        self._free_surface = self._handle
-        self._convert_surface = self._handle
-        self._convert_surface_format = self._handle
-        self._has_surface_rle = self._handle
-        self._get_surface_color_mod = self._handle
-        self._get_surface_alpha_mod = self._handle
-        self._get_surface_blend_mode = self._handle
-        self._set_surface_color_mod = self._handle
-        self._set_surface_alpha_mod = self._handle
-        self._set_surface_blend_mode = self._handle
-        self._set_surface_palette = self._handle
-        self._set_surface_rle = self._handle
-        self._fill_rect = self._handle
-        self._fill_rects = self._handle
-        self._lock_surface = self._handle
-        self._unlock_surface = self._handle
-        self._lower_blit = self._handle
-        self._lower_blit_scaled = self._handle
-        self._upper_blit = self._handle
-        self._upper_blit_scaled = self._handle
+        self._create_rgb_surface = __type_of(self._create_rgb_surface)(self._handle)
+        self._create_rgb_surface_from = __type_of(self._create_rgb_surface_from)(self._handle)
+        self._create_rgb_surface_with_format = __type_of(self._create_rgb_surface_with_format)(self._handle)
+        self._create_rgb_surface_with_format_from = __type_of(self._create_rgb_surface_with_format_from)(self._handle)
+        self._free_surface = __type_of(self._free_surface)(self._handle)
+        self._convert_surface = __type_of(self._convert_surface)(self._handle)
+        self._convert_surface_format = __type_of(self._convert_surface_format)(self._handle)
+        self._has_surface_rle = __type_of(self._has_surface_rle)(self._handle)
+        self._get_surface_color_mod = __type_of(self._get_surface_color_mod)(self._handle)
+        self._get_surface_alpha_mod = __type_of(self._get_surface_alpha_mod)(self._handle)
+        self._get_surface_blend_mode = __type_of(self._get_surface_blend_mode)(self._handle)
+        self._set_surface_color_mod = __type_of(self._set_surface_color_mod)(self._handle)
+        self._set_surface_alpha_mod = __type_of(self._set_surface_alpha_mod)(self._handle)
+        self._set_surface_blend_mode = __type_of(self._set_surface_blend_mode)(self._handle)
+        self._set_surface_palette = __type_of(self._set_surface_palette)(self._handle)
+        self._set_surface_rle = __type_of(self._set_surface_rle)(self._handle)
+        self._fill_rect = __type_of(self._fill_rect)(self._handle)
+        self._fill_rects = __type_of(self._fill_rects)(self._handle)
+        self._lock_surface = __type_of(self._lock_surface)(self._handle)
+        self._unlock_surface = __type_of(self._unlock_surface)(self._handle)
+        self._lower_blit = __type_of(self._lower_blit)(self._handle)
+        self._lower_blit_scaled = __type_of(self._lower_blit_scaled)(self._handle)
+        self._upper_blit = __type_of(self._upper_blit)(self._handle)
+        self._upper_blit_scaled = __type_of(self._upper_blit_scaled)(self._handle)
 
         # x--- initialize renderer bindings
-        self._create_renderer = self._handle
-        self._create_software_renderer = self._handle
-        self._destroy_renderer = self._handle
-        self._render_clear = self._handle
-        self._render_present = self._handle
-        self._render_get_window = self._handle
-        self._set_render_target = self._handle
-        self._set_render_draw_color = self._handle
-        self._set_render_draw_blend_mode = self._handle
-        self._get_render_draw_color = self._handle
-        self._get_render_draw_blend_mode = self._handle
-        self._get_renderer_info = self._handle
-        self._get_renderer_output_size = self._handle
-        self._get_render_target = self._handle
-        self._get_num_render_drivers = self._handle
-        self._get_render_driver_info = self._handle
-        self._render_copy = self._handle
-        self._render_copy_f = self._handle
-        self._render_copy_ex = self._handle
-        self._render_copy_exf = self._handle
-        self._render_draw_line = self._handle
-        self._render_draw_line_f = self._handle
-        self._render_draw_lines = self._handle
-        self._render_draw_lines_f = self._handle
-        self._render_draw_point = self._handle
-        self._render_draw_point_f = self._handle
-        self._render_draw_points = self._handle
-        self._render_draw_points_f = self._handle
-        self._render_draw_rect = self._handle
-        self._render_draw_rect_f = self._handle
-        self._render_draw_rects = self._handle
-        self._render_draw_rects_f = self._handle
-        self._render_fill_rect = self._handle
-        self._render_fill_rect_f = self._handle
-        self._render_fill_rects = self._handle
-        self._render_fill_rects_f = self._handle
-        self._render_flush = self._handle
-        self._render_geometry = self._handle
-        self._render_geometry_raw = self._handle
-        self._render_get_clip_rect = self._handle
-        self._render_get_integer_scale = self._handle
-        self._render_get_logical_size = self._handle
-        self._render_get_metal_command_encoder = self._handle
-        self._render_get_metal_layer = self._handle
-        self._render_get_scale = self._handle
-        self._render_get_viewport = self._handle
-        self._render_is_clip_enabled = self._handle
-        self._render_logical_to_window = self._handle
-        self._render_read_pixels = self._handle
-        self._render_set_clip_rect = self._handle
-        self._render_set_integer_scale = self._handle
-        self._render_set_logical_size = self._handle
-        self._render_set_scale = self._handle
-        self._render_set_viewport = self._handle
-        self._render_set_vsync = self._handle
-        self._render_target_supported = self._handle
-        self._render_window_to_logical = self._handle
+        self._create_renderer = __type_of(self._create_renderer)(self._handle)
+        self._create_software_renderer = __type_of(self._create_software_renderer)(self._handle)
+        self._destroy_renderer = __type_of(self._destroy_renderer)(self._handle)
+        self._render_clear = __type_of(self._render_clear)(self._handle)
+        self._render_present = __type_of(self._render_present)(self._handle)
+        self._render_get_window = __type_of(self._render_get_window)(self._handle)
+        self._set_render_target = __type_of(self._set_render_target)(self._handle)
+        self._set_render_draw_color = __type_of(self._set_render_draw_color)(self._handle)
+        self._set_render_draw_blend_mode = __type_of(self._set_render_draw_blend_mode)(self._handle)
+        self._get_render_draw_color = __type_of(self._get_render_draw_color)(self._handle)
+        self._get_render_draw_blend_mode = __type_of(self._get_render_draw_blend_mode)(self._handle)
+        self._get_renderer_info = __type_of(self._get_renderer_info)(self._handle)
+        self._get_renderer_output_size = __type_of(self._get_renderer_output_size)(self._handle)
+        self._get_render_target = __type_of(self._get_render_target)(self._handle)
+        self._get_num_render_drivers = __type_of(self._get_num_render_drivers)(self._handle)
+        self._get_render_driver_info = __type_of(self._get_render_driver_info)(self._handle)
+        self._render_copy = __type_of(self._render_copy)(self._handle)
+        self._render_copy_f = __type_of(self._render_copy_f)(self._handle)
+        self._render_copy_ex = __type_of(self._render_copy_ex)(self._handle)
+        self._render_copy_exf = __type_of(self._render_copy_exf)(self._handle)
+        self._render_draw_line = __type_of(self._render_draw_line)(self._handle)
+        self._render_draw_line_f = __type_of(self._render_draw_line_f)(self._handle)
+        self._render_draw_lines = __type_of(self._render_draw_lines)(self._handle)
+        self._render_draw_lines_f = __type_of(self._render_draw_lines_f)(self._handle)
+        self._render_draw_point = __type_of(self._render_draw_point)(self._handle)
+        self._render_draw_point_f = __type_of(self._render_draw_point_f)(self._handle)
+        self._render_draw_points = __type_of(self._render_draw_points)(self._handle)
+        self._render_draw_points_f = __type_of(self._render_draw_points_f)(self._handle)
+        self._render_draw_rect = __type_of(self._render_draw_rect)(self._handle)
+        self._render_draw_rect_f = __type_of(self._render_draw_rect_f)(self._handle)
+        self._render_draw_rects = __type_of(self._render_draw_rects)(self._handle)
+        self._render_draw_rects_f = __type_of(self._render_draw_rects_f)(self._handle)
+        self._render_fill_rect = __type_of(self._render_fill_rect)(self._handle)
+        self._render_fill_rect_f = __type_of(self._render_fill_rect_f)(self._handle)
+        self._render_fill_rects = __type_of(self._render_fill_rects)(self._handle)
+        self._render_fill_rects_f = __type_of(self._render_fill_rects_f)(self._handle)
+        self._render_flush = __type_of(self._render_flush)(self._handle)
+        self._render_geometry = __type_of(self._render_geometry)(self._handle)
+        self._render_geometry_raw = __type_of(self._render_geometry_raw)(self._handle)
+        self._render_get_clip_rect = __type_of(self._render_get_clip_rect)(self._handle)
+        self._render_get_integer_scale = __type_of(self._render_get_integer_scale)(self._handle)
+        self._render_get_logical_size = __type_of(self._render_get_logical_size)(self._handle)
+        self._render_get_metal_command_encoder = __type_of(self._render_get_metal_command_encoder)(self._handle)
+        self._render_get_metal_layer = __type_of(self._render_get_metal_layer)(self._handle)
+        self._render_get_scale = __type_of(self._render_get_scale)(self._handle)
+        self._render_get_viewport = __type_of(self._render_get_viewport)(self._handle)
+        self._render_is_clip_enabled = __type_of(self._render_is_clip_enabled)(self._handle)
+        self._render_logical_to_window = __type_of(self._render_logical_to_window)(self._handle)
+        self._render_read_pixels = __type_of(self._render_read_pixels)(self._handle)
+        self._render_set_clip_rect = __type_of(self._render_set_clip_rect)(self._handle)
+        self._render_set_integer_scale = __type_of(self._render_set_integer_scale)(self._handle)
+        self._render_set_logical_size = __type_of(self._render_set_logical_size)(self._handle)
+        self._render_set_scale = __type_of(self._render_set_scale)(self._handle)
+        self._render_set_viewport = __type_of(self._render_set_viewport)(self._handle)
+        self._render_set_vsync = __type_of(self._render_set_vsync)(self._handle)
+        self._render_target_supported = __type_of(self._render_target_supported)(self._handle)
+        self._render_window_to_logical = __type_of(self._render_window_to_logical)(self._handle)
 
         # x--- initialize texture bindings
-        self._create_texture = self._handle
-        self._create_texture_from_surface = self._handle
-        self._destroy_texture = self._handle
-        self._gl_bind_texture = self._handle
-        self._gl_unbind_texture = self._handle
-        self._lock_texture = self._handle
-        self._lock_texture_to_surface = self._handle
-        self._unlock_texture = self._handle
-        self._query_texture = self._handle
-        self._get_texture_color_mod = self._handle
-        self._get_texture_alpha_mod = self._handle
-        self._get_texture_blend_mode = self._handle
-        self._get_texture_scale_mode = self._handle
-        self._get_texture_user_data = self._handle
-        self._set_texture_color_mod = self._handle
-        self._set_texture_alpha_mod = self._handle
-        self._set_texture_blend_mode = self._handle
-        self._set_texture_scale_mode = self._handle
-        self._set_texture_user_data = self._handle
-        self._update_texture = self._handle
-        self._update_nv_texture = self._handle
-        self._update_yuv_texture = self._handle
+        self._create_texture = __type_of(self._create_texture)(self._handle)
+        self._create_texture_from_surface = __type_of(self._create_texture_from_surface)(self._handle)
+        self._destroy_texture = __type_of(self._destroy_texture)(self._handle)
+        self._gl_bind_texture = __type_of(self._gl_bind_texture)(self._handle)
+        self._gl_unbind_texture = __type_of(self._gl_unbind_texture)(self._handle)
+        self._lock_texture = __type_of(self._lock_texture)(self._handle)
+        self._lock_texture_to_surface = __type_of(self._lock_texture_to_surface)(self._handle)
+        self._unlock_texture = __type_of(self._unlock_texture)(self._handle)
+        self._query_texture = __type_of(self._query_texture)(self._handle)
+        self._get_texture_color_mod = __type_of(self._get_texture_color_mod)(self._handle)
+        self._get_texture_alpha_mod = __type_of(self._get_texture_alpha_mod)(self._handle)
+        self._get_texture_blend_mode = __type_of(self._get_texture_blend_mode)(self._handle)
+        self._get_texture_scale_mode = __type_of(self._get_texture_scale_mode)(self._handle)
+        self._get_texture_user_data = __type_of(self._get_texture_user_data)(self._handle)
+        self._set_texture_color_mod = __type_of(self._set_texture_color_mod)(self._handle)
+        self._set_texture_alpha_mod = __type_of(self._set_texture_alpha_mod)(self._handle)
+        self._set_texture_blend_mode = __type_of(self._set_texture_blend_mode)(self._handle)
+        self._set_texture_scale_mode = __type_of(self._set_texture_scale_mode)(self._handle)
+        self._set_texture_user_data = __type_of(self._set_texture_user_data)(self._handle)
+        self._update_texture = __type_of(self._update_texture)(self._handle)
+        self._update_nv_texture = __type_of(self._update_nv_texture)(self._handle)
+        self._update_yuv_texture = __type_of(self._update_yuv_texture)(self._handle)
 
         # x--- initialize opengl
-        self._gl_create_context = self._handle
-        self._gl_delete_context = self._handle
+        self._gl_create_context = __type_of(self._gl_create_context)(self._handle)
+        self._gl_delete_context = __type_of(self._gl_delete_context)(self._handle)
 
     # TODO: These could be generated automatically, but
     #       im still looking for a nice way. Then these
@@ -885,6 +888,11 @@ struct _SDL:
             self._destroy_window_surface.call(window),
             "Could not destroy window surface",
         )
+
+    @always_inline
+    fn get_window_info(self, window: Ptr[_Window], info: Ptr[_SysWMinfo]) raises -> BoolC:
+        """Get driver-specific information about a window."""
+        return self.error.if_false(self._get_window_info.call(window, info), "Could not get info")
 
     @always_inline
     fn get_window_surface(self, window: Ptr[_Window]) raises -> Ptr[_Surface]:

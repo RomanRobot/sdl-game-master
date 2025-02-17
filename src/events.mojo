@@ -254,7 +254,7 @@ struct _Event:
     var data1: SIMD[DType.uint8, 16]
     var data2: SIMD[DType.uint8, 32]
 
-    fn __init__(inout self):
+    fn __init__(mut self):
         self.type = 0
         self.data0 = 0
         self.data1 = 0

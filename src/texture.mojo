@@ -11,7 +11,7 @@ struct Texture:
     var _rc: UnsafePointer[Int]
 
     fn __init__(
-        inout self,
+        mut self,
         renderer: Renderer,
         format: UInt32,
         access: Int,
@@ -23,25 +23,25 @@ struct Texture:
         self._rc = UnsafePointer[Int].alloc(1)
         self._rc[] = 0
 
-    fn __init__(inout self, renderer: Renderer, surface: Surface) raises:
+    fn __init__(mut self, renderer: Renderer, surface: Surface) raises:
         self.sdl = adr(renderer.sdl[])
         self._texture_ptr = self.sdl[]._sdl.create_texture_from_surface(renderer._renderer_ptr, surface._surface_ptr)
         self._rc = UnsafePointer[Int].alloc(1)
         self._rc[] = 0
 
-    fn __init__(inout self, sdl: SDL, texture_ptr: Ptr[_Texture] = Ptr[_Texture]()) raises:
+    fn __init__(mut self, sdl: SDL, texture_ptr: Ptr[_Texture] = Ptr[_Texture]()) raises:
         self.sdl = adr(sdl)
         self._texture_ptr = texture_ptr
         self._rc = UnsafePointer[Int].alloc(1)
         self._rc[] = 0
 
-    fn __copyinit__(inout self, other: Self):
+    fn __copyinit__(mut self, other: Self):
         self.sdl = other.sdl
         self._texture_ptr = other._texture_ptr
         self._rc = other._rc
         self._rc[] += 1
 
-    fn __moveinit__(inout self, owned other: Self):
+    fn __moveinit__(mut self, owned other: Self):
         self.sdl = other.sdl
         self._texture_ptr = other._texture_ptr
         self._rc = other._rc

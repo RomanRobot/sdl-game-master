@@ -4,7 +4,6 @@ from sys import DLHandle, os_is_macos, os_is_linux
 from collections import Optional
 from .._sdl import SDL_Fn
 from ..surface import _Surface
-from sys.info import os_is_macos, os_is_linux
 from builtin.constrained import constrained
 
 
@@ -18,7 +17,7 @@ struct _IMG:
     var _img_quit: SDL_Fn["IMG_Quit", fn () -> NoneType]
     var _img_load: SDL_Fn["IMG_Load", fn (Ptr[CharC]) -> Ptr[_Surface]]
 
-    fn __init__(inout self, error: SDL_Error):
+    fn __init__(mut self, error: SDL_Error):
         @parameter
         if os_is_macos():
             self._handle = DLHandle(".magic/envs/default/lib/libSDL2_image.dylib")
@@ -29,9 +28,9 @@ struct _IMG:
             self._handle = utils._uninit[DLHandle]()
 
         self.error = error
-        self._img_init = self._handle
-        self._img_quit = self._handle
-        self._img_load = self._handle
+        self._img_init = __type_of(self._img_init)(self._handle)
+        self._img_quit = __type_of(self._img_quit)(self._handle)
+        self._img_load = __type_of(self._img_load)(self._handle)
 
     @always_inline
     fn init(self, flags: Int32) raises:

@@ -6,13 +6,13 @@ from ._sdl import _SDL
 from .texture import _Texture
 
 
-struct Renderer[lif: AnyLifetime[False].type]:
-    var sdl: Reference[SDL, lif]
+struct Renderer[lif: ImmutableOrigin]:
+    var sdl: Pointer[SDL, lif]
     var _renderer_ptr: Ptr[_Renderer]
     var window: Window[lif]
 
     fn __init__(
-        inout self,
+        mut self,
         owned window: Window[lif],
         index: Int = -1,
         flags: UInt32 = 0,
@@ -21,12 +21,12 @@ struct Renderer[lif: AnyLifetime[False].type]:
         self.window = window^
         self._renderer_ptr = self.sdl[]._sdl.create_renderer(self.window._window_ptr, index, flags)
 
-    fn __init__(inout self, owned surface: Surface[lif]) raises:
+    fn __init__(mut self, owned surface: Surface[lif]) raises:
         self.sdl = surface.sdl
         self._renderer_ptr = self.sdl[]._sdl.create_software_renderer(surface._surface_ptr)
         self.window = Window(self.sdl[])
 
-    fn __moveinit__(inout self, owned other: Self):
+    fn __moveinit__(mut self, owned other: Self):
         self.sdl = other.sdl
         self._renderer_ptr = other._renderer_ptr
         self.window = other.window^
@@ -165,7 +165,7 @@ struct Renderer[lif: AnyLifetime[False].type]:
         var w = utils._uninit[IntC]()
         var h = utils._uninit[IntC]()
         self.sdl[]._sdl.get_renderer_output_size(self._renderer_ptr, adr(w), adr(h))
-        return int(w), int(h)
+        return Int(w), Int(h)
 
     fn draw_point[type: DType = DType.float32](self, x: Scalar[type], y: Scalar[type]) raises:
         @parameter

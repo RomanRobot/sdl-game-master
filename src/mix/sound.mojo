@@ -19,11 +19,11 @@ alias AUDIO_F32MSB = 0x9120
 alias AUDIO_F32 = AUDIO_F32LSB
 
 
-struct MixChunk[lif: AnyLifetime[False].type]:
-    var mix: Reference[_MIX, lif]
+struct MixChunk[lif: ImmutableOrigin]:
+    var mix: Pointer[_MIX, lif]
     var _mixchunk_ptr: Ptr[_MixChunk]
 
-    fn __init__(inout self, ref [lif]mix: _MIX, _mixchunk_ptr: Ptr[_MixChunk]):
+    fn __init__(mut self, ref [lif]mix: _MIX, _mixchunk_ptr: Ptr[_MixChunk]):
         self.mix = mix
         self._mixchunk_ptr = _mixchunk_ptr
 
@@ -39,15 +39,15 @@ struct _MixChunk:
     pass
 
 
-struct MixMusic[lif: AnyLifetime[False].type]:
-    var mix: Reference[_MIX, lif]
+struct MixMusic[lif: ImmutableOrigin]:
+    var mix: Pointer[_MIX, lif]
     var _mixmusic_ptr: Ptr[_MixMusic]
 
-    fn __init__(inout self, ref [lif]mix: _MIX, path: String) raises:
+    fn __init__(mut self, ref [lif]mix: _MIX, path: String) raises:
         self.mix = mix
         self._mixmusic_ptr = mix.load_music(path.unsafe_cstr_ptr().bitcast[DType.uint8]())
 
-    fn __init__(inout self, ref [lif]mix: _MIX, _mixmusic_ptr: Ptr[_MixMusic]):
+    fn __init__(mut self, ref [lif]mix: _MIX, _mixmusic_ptr: Ptr[_MixMusic]):
         self.mix = mix
         self._mixmusic_ptr = _mixmusic_ptr
 

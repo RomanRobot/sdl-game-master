@@ -4,7 +4,6 @@ from sys import DLHandle, os_is_macos, os_is_linux
 from .._sdl import SDL_Fn
 from ..surface import _Surface
 from .font import Font, _Font
-from sys.info import os_is_macos, os_is_linux
 from builtin.constrained import constrained
 
 
@@ -30,7 +29,7 @@ struct _TTF:
         fn (Ptr[_Font], Ptr[CharC], UInt32) -> UnsafePointer[_Surface],
     ]
 
-    fn __init__(inout self, error: SDL_Error):
+    fn __init__(mut self, error: SDL_Error):
         @parameter
         if os_is_macos():
             self._handle = DLHandle(".magic/envs/default/lib/libSDL2_ttf.dylib")
@@ -41,13 +40,13 @@ struct _TTF:
             self._handle = utils._uninit[DLHandle]()
 
         self.error = error
-        self._ttf_init = self._handle
-        self._ttf_quit = self._handle
-        self._ttf_open_font = self._handle
-        self._ttf_close_font = self._handle
-        self._ttf_render_text_solid = self._handle
-        self._ttf_render_text_shaded = self._handle
-        self._ttf_render_text_blended = self._handle
+        self._ttf_init = __type_of(self._ttf_init)(self._handle)
+        self._ttf_quit = __type_of(self._ttf_quit)(self._handle)
+        self._ttf_open_font = __type_of(self._ttf_open_font)(self._handle)
+        self._ttf_close_font = __type_of(self._ttf_close_font)(self._handle)
+        self._ttf_render_text_solid = __type_of(self._ttf_render_text_solid)(self._handle)
+        self._ttf_render_text_shaded = __type_of(self._ttf_render_text_shaded)(self._handle)
+        self._ttf_render_text_blended = __type_of(self._ttf_render_text_blended)(self._handle)
 
     @always_inline
     fn init(self) raises:

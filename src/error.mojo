@@ -3,7 +3,6 @@
 from sys.ffi import DLHandle
 from ._sdl import SDL_Fn
 
-
 @value
 @register_passable("trivial")
 struct SDL_Error:
@@ -14,16 +13,16 @@ struct SDL_Error:
     var _clear_error: SDL_Fn["SDL_ClearError", fn () -> NoneType]
 
     @always_inline("nodebug")
-    fn __init__(inout self, _handle: DLHandle):
-        self._get_error = _handle
-        self._set_error = _handle
-        self._clear_error = _handle
+    fn __init__(mut self, _handle: DLHandle):
+        self._get_error = __type_of(self._get_error)(_handle)
+        self._set_error = __type_of(self._set_error)(_handle)
+        self._clear_error = __type_of(self._clear_error)(_handle)
 
     @always_inline("nodebug")
     fn __call__(self) -> Error:
         @parameter
         if error_level == 2:
-            return String.format_sequence("SDL_Error: ", String(self._get_error.call()))
+            return String.write("SDL_Error: ", self._get_error.call())
         else:
             return "SDL_Error"
 
@@ -31,9 +30,9 @@ struct SDL_Error:
     fn __call__(self, msg: StringLiteral) -> Error:
         @parameter
         if error_level == 2:
-            return String.format_sequence("SDL_Error: ", msg, ", ", String(self._get_error.call()))
+            return String.write("SDL_Error: ", msg, ", ", self._get_error.call())
         else:
-            return String.format_sequence("SDL_Error: ", msg)
+            return String.write("SDL_Error: ", msg)
 
     @always_inline("nodebug")
     fn set_error(self, fmt: StringLiteral) raises:
@@ -62,3 +61,13 @@ struct SDL_Error:
         if error_level > 0:
             if code != 0:
                 raise self(msg)
+
+    @always_inline("nodebug")
+    fn if_false(self, bool: BoolC, msg: StringLiteral) raises -> __type_of(bool):
+        """Raises an error if the bool is false."""
+        if bool:
+            return bool
+
+        @parameter
+        if error_level > 0:
+            raise self(msg)

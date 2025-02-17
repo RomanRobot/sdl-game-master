@@ -5,8 +5,9 @@ from collections import Optional
 from .._sdl import SDL_Fn
 from ..surface import _Surface
 from ..render import _Renderer
-from sys.info import os_is_macos, os_is_linux
 from builtin.constrained import constrained
+
+from memory import UnsafePointer
 
 
 struct _GFX:
@@ -37,7 +38,7 @@ struct _GFX:
         ) -> IntC,
     ]
 
-    fn __init__(inout self, error: SDL_Error):
+    fn __init__(mut self, error: SDL_Error):
         @parameter
         if os_is_macos():
             self._handle = DLHandle(".magic/envs/default/lib/libSDL2_gfx.dylib")
@@ -48,9 +49,9 @@ struct _GFX:
             self._handle = utils._uninit[DLHandle]()
 
         self.error = error
-        self._rotozoom_surface = self._handle
-        self._circle_color = self._handle
-        self._circle_rgba = self._handle
+        self._rotozoom_surface = __type_of(self._rotozoom_surface)(self._handle)
+        self._circle_color = __type_of(self._circle_color)(self._handle)
+        self._circle_rgba = __type_of(self._circle_rgba)(self._handle)
 
     fn quit(self):
         pass

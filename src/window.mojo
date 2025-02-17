@@ -1,6 +1,6 @@
 """Defines an SDL Window."""
 
-from collections import Optional
+from collections import Optional, InlineArray
 from ._sdl import _SDL
 
 alias windowpos_undefined_mask = 0x1FFF0000
@@ -19,14 +19,14 @@ fn windowpos_centered_display(x: Int32) -> Int32:
     return windowpos_centered_mask | (x & 0xFFFF)
 
 
-struct Window[lif: AnyLifetime[False].type]:
+struct Window[lif: ImmutableOrigin]:
     """A higher level wrapper around an SDL_Window."""
 
-    var sdl: Reference[SDL, lif]
+    var sdl: Pointer[SDL, lif]
     var _window_ptr: Ptr[_Window]
 
     fn __init__(
-        inout self,
+        mut self,
         ref [lif]sdl: SDL,
         name: String,
         width: Int32,
@@ -47,7 +47,7 @@ struct Window[lif: AnyLifetime[False].type]:
         allow_highdpi: Bool = False,
     ) raises:
         # set sdl
-        self.sdl = sdl
+        self.sdl = Pointer.address_of(sdl)
 
         # calculate window position
         if xpos and xcenter:
@@ -71,7 +71,7 @@ struct Window[lif: AnyLifetime[False].type]:
         flags |= WindowFlags.ALLOW_HIGHDPI * allow_highdpi
 
         self._window_ptr = self.sdl[]._sdl.create_window(
-            name.unsafe_cstr_ptr().bitcast[DType.uint8](),
+            name.unsafe_cstr_ptr().bitcast[CharC](),
             x,
             y,
             width,
@@ -79,29 +79,35 @@ struct Window[lif: AnyLifetime[False].type]:
             flags,
         )
 
-    fn __init__(inout self, ref [lif]sdl: SDL, _window_ptr: Ptr[_Window] = Ptr[_Window]()):
-        self.sdl = sdl
+    fn __init__(mut self, ref [lif]sdl: SDL, _window_ptr: Ptr[_Window] = Ptr[_Window]()):
+        self.sdl = Pointer.address_of(sdl)
         self._window_ptr = _window_ptr
 
-    fn __moveinit__(inout self, owned other: Self):
+    fn __moveinit__(mut self, owned other: Self):
         self.sdl = other.sdl
         self._window_ptr = other._window_ptr
 
     fn __del__(owned self):
         self.sdl[]._sdl.destroy_window(self._window_ptr)
 
-    fn set_fullscreen(inout self, flags: UInt32) raises:
+    fn set_fullscreen(mut self, flags: UInt32) raises:
         self.sdl[]._sdl.set_window_fullscreen(self._window_ptr, flags)
 
-    fn get_surface(inout self) raises -> Surface[lif]:
+    fn get_surface(mut self) raises -> Surface[lif]:
         var surface = Surface(self.sdl[], self.sdl[]._sdl.get_window_surface(self._window_ptr))
         surface._surface_ptr[].refcount += 1
         return surface^
+    
+    fn get_native_window(self) raises -> UnsafePointer[_NSWindow]:
+        var wm_info = _SysWMinfo()
+        self.sdl[]._sdl.get_window_info(self._window_ptr, UnsafePointer[_SysWMinfo].address_of(wm_info))
+        # TODO: Handle other platforms
+        return wm_info.cocoa_window
 
     fn update_surface(self) raises:
         self.sdl[]._sdl.update_window_surface(self._window_ptr)
 
-    fn destroy_surface(inout self) raises:
+    fn destroy_surface(mut self) raises:
         self.sdl[]._sdl.destroy_window_surface(self._window_ptr)
 
 
@@ -110,7 +116,6 @@ struct _Window:
     """The opaque type used to identify a window."""
 
     pass
-
 
 struct WindowFlags:
     """Window Flags."""
@@ -196,4 +201,58 @@ struct FlashOperation:
 
 @register_passable("trivial")
 struct _GLContext:
+    pass
+
+struct SDL_version:
+    """Information about the version of SDL in use."""
+
+    var major: UInt8
+    var minor: UInt8
+    var patch: UInt8
+
+    fn __init__(out self):
+        self.major = 2
+        self.minor = 30
+        self.patch = 10
+
+struct SDL_SYSWM_TYPE:
+    """These are the various supported windowing subsystems"""
+
+    var value: UInt32
+
+    fn __init__(out self, value: UInt32):
+        self.value = value
+
+    alias SDL_SYSWM_UNKNOWN = Self(0)
+    alias SDL_SYSWM_WINDOWS = Self(1)
+    alias SDL_SYSWM_X11 = Self(2)
+    alias SDL_SYSWM_DIRECTFB = Self(3)
+    alias SDL_SYSWM_COCOA = Self(4)
+    alias SDL_SYSWM_UIKIT = Self(5)
+    alias SDL_SYSWM_WAYLAND = Self(6)
+    alias SDL_SYSWM_MIR = Self(7) # no longer available, left for API/ABI compatibility. Remove in 2.1!
+    alias SDL_SYSWM_WINRT = Self(8)
+    alias SDL_SYSWM_ANDROID = Self(9)
+    alias SDL_SYSWM_VIVANTE = Self(10)
+    alias SDL_SYSWM_OS2 = Self(11)
+    alias SDL_SYSWM_HAIKU = Self(12)
+    alias SDL_SYSWM_KMSDRM = Self(13)
+    alias SDL_SYSWM_RISCOS = Self(14)
+
+struct _SysWMinfo:
+    """The custom window manager information structure."""
+
+    var version: SDL_version
+    var subsystem: SDL_SYSWM_TYPE
+    var cocoa_window: Ptr[_NSWindow]
+    var dummy: InlineArray[UInt8, 43]
+
+    fn __init__(out self):
+        self.version = SDL_version()
+        self.subsystem = SDL_SYSWM_TYPE.SDL_SYSWM_UNKNOWN
+        self.cocoa_window = Ptr[_NSWindow]()
+        self.dummy = InlineArray[UInt8, 43](0)
+
+
+struct _NSWindow:
     pass

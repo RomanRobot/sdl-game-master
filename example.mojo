@@ -1,4 +1,4 @@
-from sdl import *
+from src import *
 
 # TODO: collision rect/point
 
@@ -42,21 +42,21 @@ def main():
                 playing = 0
             elif event[].isa[KeyDownEvent]():
                 var e = event[][KeyDownEvent]
-                held_keys[int(e.key)] = True
+                held_keys[Int(e.key)] = True
                 # if e.key == Keys.space:
                 #     test_sound.play(1)
             elif event[].isa[KeyUpEvent]():
                 var e = event[][KeyUpEvent]
-                held_keys[int(e.key)] = False
+                held_keys[Int(e.key)] = False
 
         if held_keys[Keys.w]:
-            player_box.y -= int(player_speed * clock.delta_time)
+            player_box.y -= Int(player_speed * clock.delta_time)
         if held_keys[Keys.a]:
-            player_box.x -= int(player_speed * clock.delta_time)
+            player_box.x -= Int(player_speed * clock.delta_time)
         if held_keys[Keys.s]:
-            player_box.y += int(player_speed * clock.delta_time)
+            player_box.y += Int(player_speed * clock.delta_time)
         if held_keys[Keys.d]:
-            player_box.x += int(player_speed * clock.delta_time)
+            player_box.x += Int(player_speed * clock.delta_time)
 
         window.get_surface().fill(background_color)
         window.get_surface().fill(player_color, player_box)

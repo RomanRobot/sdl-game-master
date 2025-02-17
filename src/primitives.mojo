@@ -10,7 +10,7 @@ struct Color:
     var b: UInt8
     var a: UInt8
 
-    fn __init__(inout self, r: UInt8, g: UInt8, b: UInt8, a: UInt8 = 0):
+    fn __init__(mut self, r: UInt8, g: UInt8, b: UInt8, a: UInt8 = 0):
         self.r = r
         self.g = g
         self.b = b
@@ -26,7 +26,7 @@ struct DPoint[type: DType]:
     var y: Scalar[type]
 
     @always_inline("nodebug")
-    fn __init__(inout self, x: Scalar, y: Scalar):
+    fn __init__(mut self, x: Scalar, y: Scalar):
         self.x = x.cast[type]()
         self.y = y.cast[type]()
 
@@ -47,7 +47,7 @@ struct DRect[type: DType]:
     var h: Scalar[type]
 
     @always_inline("nodebug")
-    fn __init__(inout self, x: Scalar, y: Scalar, w: Scalar, h: Scalar):
+    fn __init__(mut self, x: Scalar, y: Scalar, w: Scalar, h: Scalar):
         self.x = x.cast[type]()
         self.y = y.cast[type]()
         self.w = w.cast[type]()

@@ -16,6 +16,7 @@ from .keyboard import Keyboard, Keys, KeyCode
 from .mouse import Mouse
 from .time import Clock
 
+from memory import UnsafePointer
 # from .opengl import gl_create_context, gl_delete_context
 
 

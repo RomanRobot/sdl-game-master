@@ -4,17 +4,17 @@ from .utils import adr
 from ._sdl import _SDL
 
 
-struct Keyboard[lif: AnyLifetime[False].type]:
-    var sdl: Reference[SDL, lif]
+struct Keyboard[lif: ImmutableOrigin]:
+    var sdl: Pointer[SDL, lif]
     var state: Ptr[UInt8]
 
-    fn __init__(inout self, ref [lif]sdl: SDL):
+    fn __init__(mut self, ref [lif]sdl: SDL):
         self.sdl = sdl
         var numkeys = IntC()
         self.state = sdl._sdl.get_keyboard_state(adr(numkeys))
 
     fn get_key(self, key: KeyCode) -> Bool:
-        return bool(self.state[int(key.value)])
+        return bool(self.state[Int(key.value)])
 
 
 struct Keys:

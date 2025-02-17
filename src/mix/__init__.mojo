@@ -3,7 +3,6 @@
 from sys import DLHandle, os_is_macos, os_is_linux
 from .._sdl import SDL_Fn
 from .sound import MixChunk, _MixChunk, MixMusic, _MixMusic
-from sys.info import os_is_macos, os_is_linux
 from builtin.constrained import constrained
 
 
@@ -22,7 +21,7 @@ struct _MIX:
     var _free_music: SDL_Fn["Mix_FreeMusic", fn (Ptr[_MixMusic]) -> NoneType]
     var _play_music: SDL_Fn["Mix_PlayMusic", fn (Ptr[_MixMusic], Int32) -> Int32]
 
-    fn __init__(inout self, error: SDL_Error):
+    fn __init__(mut self, error: SDL_Error):
         @parameter
         if os_is_macos():
             self._handle = DLHandle(".magic/envs/default/lib/libSDL2_mixer.dylib")
@@ -33,14 +32,14 @@ struct _MIX:
             self._handle = utils._uninit[DLHandle]()
 
         self.error = error
-        self._open_audio = self._handle
-        self._close_audio = self._handle
-        self._load_wav = self._handle
-        self._free_chunk = self._handle
-        self._play_channel = self._handle
-        self._load_mus = self._handle
-        self._free_music = self._handle
-        self._play_music = self._handle
+        self._open_audio = __type_of(self._open_audio)(self._handle)
+        self._close_audio = __type_of(self._close_audio)(self._handle)
+        self._load_wav = __type_of(self._load_wav)(self._handle)
+        self._free_chunk = __type_of(self._free_chunk)(self._handle)
+        self._play_channel = __type_of(self._play_channel)(self._handle)
+        self._load_mus = __type_of(self._load_mus)(self._handle)
+        self._free_music = __type_of(self._free_music)(self._handle)
+        self._play_music = __type_of(self._play_music)(self._handle)
 
     @always_inline
     fn init(
